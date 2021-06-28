@@ -17,27 +17,32 @@ import pyomo.environ as pyo
 
 # Scenario (tree) configuration
 scenario_name = "test"
+scenario_variant = "sto_inv"
+scenario_variant = "det_inv_high"
 
-print("### Initializing \033[94m EMPRISE framework\033[0m for scenario setup \033[1m" + scenario_name + "\033[0m ###")
+print("### Initializing EMPRISE framework for scenario setup '" + scenario_name + "' ###")
 
-sample_size = 1 * 3 * 24  # hourly time steps of system operation sample
-sample_offset = 45 * 24  # offset of system operation sample
-reference_years = [2006, 2007]  # [2007, 2008, 2011]
+sample_size = 1 * 14 * 24  # hourly time steps of system operation sample
+sample_offset = 26 * 7 * 24  # offset of system operation sample
+reference_years = [2012]  # [2006, 2008]  # [2007, 2008, 2011]
 
-number_of_stages = 3  # Planning stages, e.g. 3 (representing planning periods 2020, 2030, 2040)
+number_of_stages = 3  # Planning periods, e.g. 3 (representing planning periods 2025, 2035, 2045)
 number_of_investment_scenarios = 2
 number_of_system_operation_scenarios = len(reference_years)
+
+scenario_name_extended = scenario_name + "_" + scenario_variant + "_" + "_".join([str(ry) for ry in reference_years])
 
 # Create scenario probability dictionary
 scenario_probability_sysop = {"sysop_" + str(i): [1.0 / number_of_system_operation_scenarios] * number_of_system_operation_scenarios for i in range(1, number_of_stages + 1)}
 scenario_probability_inv = {"inv_" + str(i): [0.7, 0.3] for i in range(1, number_of_stages + 1)}
+# scenario_probability_inv = {"inv_" + str(i): [1.0] for i in range(1, number_of_stages + 1)}
 scenario_probability = {**scenario_probability_inv, **scenario_probability_sysop}
 
 
 # --- Path and directory information
 data_folder_name = "data"
 plot_folder_name = "plot"
-result_folder_name = "result"
+result_folder_name = "result/" + scenario_name
 json_file_name = "ef_solution.json"
 cluster_working_directory = "/home/phaertel/python/simulations"
 
@@ -51,6 +56,7 @@ def checkAndCreateDirectory(directory):
 # --- Check whether running on local windows or other machine (HPCC)
 if os.name == "nt":
     working_dir = ""
+    os.environ["EMPRISE_JOB_NAME"] = scenario_name_extended
 else:
     working_dir = cluster_working_directory
     if "TMP_PYOMO_DIR" in os.environ:
@@ -70,7 +76,9 @@ file_names_structural = {
     "generators_thermal": os.path.join(path_data_dir, scenario_name + "_generators_thermal.csv"),
     "generators_renewable": os.path.join(path_data_dir, scenario_name + "_generators_renewable.csv"),
     "consumers_conventional": os.path.join(path_data_dir, scenario_name + "_consumers_conventional.csv"),
+    "storage": os.path.join(path_data_dir, scenario_name + "_storage.csv"),
     "cost_generation": os.path.join(path_data_dir, scenario_name + "_cost_generation.csv"),
+    "cost_storage": os.path.join(path_data_dir, scenario_name + "_cost_storage.csv"),
 }
 
 # --- Timeseries input data directory information
@@ -140,12 +148,14 @@ def scenario_data(dict_data_sc, scenario_name, inv_sc, sysop_sc):
     if number_of_stages == 4:
         emission_price = np.matrix([[20.0, 30.0, 90.0, 120.0], [40.0, 80.0, 130.0, 300.0]])
     elif number_of_stages == 3:
-        emission_price = np.matrix([[80.0, 100.0, 200.0], [80.0, 250.0, 500.0]])
+        emission_price = np.matrix([[70.0, 100.0, 200.0], [70.0, 70.0, 70.0]])
+        # emission_price = np.matrix([[70.0, 100.0, 200.0]])
+        # emission_price = np.matrix([[80.0, 100.0, 200.0], [80.0, 200.0, 350.0]])
     elif number_of_stages == 2:
         emission_price = np.matrix([[20.0, 30.0], [20.0, 80.0]])
 
     dict_data_sc["emprise"]["costSystemOperationEmissionPrice"] = {stage: emission_price[inv_sc[stage - 1] - 1, stage - 1] for stage in range(1, dict_data_sc["emprise"]["numberOfStages"][None] + 1)}  # EUR/tCO2eq
-    # print(dict_data_sc['emprise']['costSystemOperationEmissionPrice'])
+    print(dict_data_sc["emprise"]["costSystemOperationEmissionPrice"])
 
     return dict_data_sc
 

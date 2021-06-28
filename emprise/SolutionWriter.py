@@ -43,6 +43,8 @@ class SolutionWriter(SingletonPlugin):
 
         if os.name == "nt":
             result_dir = os.path.join(os.getcwd(), "result")
+            if "EMPRISE_JOB_NAME" in os.environ:
+                result_dir = os.path.join(result_dir, os.environ["EMPRISE_JOB_NAME"])
         else:
             result_dir = os.path.join(os.getcwd(), "python", "simulations", "result")
             if "EMPRISE_JOB_NAME" in os.environ:
@@ -112,6 +114,9 @@ class SolutionWriter(SingletonPlugin):
                             "generatorRenewableCapacity",
                             "generatorRenewableNewCapacity",
                             "generatorRenewableDecommissionedCapacity",
+                            "electricityStorageCapacity",
+                            "electricityStorageNewCapacity",
+                            "electricityStorageDecommissionedCapacity",
                         ]
                     ]
                 ):

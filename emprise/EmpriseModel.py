@@ -67,6 +67,8 @@ class EmpriseModel:
         model.GEN_RENEWABLE = pyo.Set()
         model.GEN_RENEWABLE_TYPE = pyo.Set()  # Example: ONSHORE_IEC_1
         model.GEN_TYPE = model.GEN_THERMAL_TYPE | model.GEN_RENEWABLE_TYPE
+        model.STORAGE = pyo.Set()
+        model.STORAGE_TYPE = pyo.Set()  # Example: LI_ION
 
         model.BRANCH = pyo.Set(dimen=2)
 
@@ -99,15 +101,17 @@ class EmpriseModel:
         model.periodWeightFactor = pyo.Param(within=pyo.NonNegativeReals)
         model.emissionFactor = pyo.Param(model.FUEL, within=pyo.NonNegativeReals)
 
-        model.operationalStageContribution = pyo.Param(
+        model.operationalStageContributionGeneration = pyo.Param(
             model.STAGE_OPERATIONAL, model.STAGE, model.GEN_THERMAL_TYPE | model.GEN_RENEWABLE_TYPE, within=pyo.PercentFraction
         )  # model.STAGE represents the technology development stages
+        model.operationalStageContributionStorage = pyo.Param(model.STAGE_OPERATIONAL, model.STAGE, model.STORAGE_TYPE, within=pyo.PercentFraction)  # model.STAGE represents the technology development stages
 
         # - Generation thermal
         model.generationThermalNode = pyo.Param(model.GEN_THERMAL, within=model.NODE)
         model.generationThermalType = pyo.Param(model.GEN_THERMAL, within=model.GEN_THERMAL_TYPE)
         model.generationThermalFuel = pyo.Param(model.GEN_THERMAL, within=model.FUEL)
         model.generationThermalEta = pyo.Param(model.GEN_THERMAL, within=pyo.NonNegativeReals)
+        model.generationThermalPotentialMax = pyo.Param(model.STAGE, model.GEN_THERMAL, within=pyo.Reals)
 
         # - Generation renewable
         model.generationRenewableNode = pyo.Param(model.GEN_RENEWABLE, within=model.NODE)
@@ -115,6 +119,7 @@ class EmpriseModel:
         model.generationRenewableIec = pyo.Param(model.GEN_RENEWABLE, within=pyo.Integers)
         model.generationRenewableLcoe = pyo.Param(model.GEN_RENEWABLE, within=pyo.Any)
         model.generationRenewableProfile = pyo.Param(model.STAGE, model.GEN_RENEWABLE, model.TIME, within=pyo.Reals)
+        model.generationRenewablePotentialMax = pyo.Param(model.STAGE, model.GEN_RENEWABLE, within=pyo.Reals)
 
         # model.generationRenewableOperationalInformation = pyo.Param(model.GEN_RENEWABLE, model.STAGE_OPERATIONAL, initialize=generationRenewableOperationalInformation_rule, within=pyo.Any)
 
@@ -122,6 +127,16 @@ class EmpriseModel:
         model.convLoadNode = pyo.Param(model.LOAD, within=model.NODE)
         model.convLoadAnnualDemand = pyo.Param(model.LOAD, within=pyo.Reals)
         model.convLoadProfile = pyo.Param(model.STAGE, model.LOAD, model.TIME, within=pyo.Reals)
+
+        # - Storage
+        model.storageNode = pyo.Param(model.STORAGE, within=model.NODE)
+        model.storageType = pyo.Param(model.STORAGE, within=model.STORAGE_TYPE)
+        model.storageEtaOut = pyo.Param(model.STORAGE, within=pyo.PercentFraction)
+        model.storageEtaIn = pyo.Param(model.STORAGE, within=pyo.PercentFraction)
+        model.storageRatioVolume = pyo.Param(model.STORAGE, within=pyo.NonNegativeReals)
+        model.storageSelfDischargeRate = pyo.Param(model.STORAGE, within=pyo.PercentFraction)
+        model.storageDepthOfDischarge = pyo.Param(model.STORAGE, within=pyo.PercentFraction)
+        model.storagePotentialMax = pyo.Param(model.STAGE, model.STORAGE, within=pyo.Reals)
 
         # - Transmission flows
         model.branchDistance = pyo.Param(model.BRANCH, within=pyo.NonNegativeReals)
@@ -133,11 +148,12 @@ class EmpriseModel:
         model.costSystemOperationEmissionPrice = pyo.Param(model.STAGE, within=pyo.NonNegativeReals)
         model.costSystemOperationFuel = pyo.Param(model.FUEL, within=pyo.NonNegativeReals)
 
-        model.costInvestmentThermalCapex = pyo.Param(model.GEN_THERMAL_TYPE, within=pyo.NonNegativeReals)
-        model.costInvestmentThermalOpex = pyo.Param(model.GEN_THERMAL_TYPE, within=pyo.NonNegativeReals)
-        model.costInvestmentRenewableCapex = pyo.Param(model.GEN_RENEWABLE_TYPE, within=pyo.NonNegativeReals)
-        model.costInvestmentRenewableOpex = pyo.Param(model.GEN_RENEWABLE_TYPE, within=pyo.NonNegativeReals)
+        # model.costInvestmentThermalCapex = pyo.Param(model.GEN_THERMAL_TYPE, within=pyo.NonNegativeReals)
+        # model.costInvestmentThermalOpex = pyo.Param(model.GEN_THERMAL_TYPE, within=pyo.NonNegativeReals)
+        # model.costInvestmentRenewableCapex = pyo.Param(model.GEN_RENEWABLE_TYPE, within=pyo.NonNegativeReals)
+        # model.costInvestmentRenewableOpex = pyo.Param(model.GEN_RENEWABLE_TYPE, within=pyo.NonNegativeReals)
 
+        # --- Generation (thermal and renewable technologies)
         model.costGenerationCapex = pyo.Param(model.STAGE, model.GEN_TYPE, within=pyo.NonNegativeReals)
         model.costGenerationDepreciationPeriod = pyo.Param(model.STAGE, model.GEN_TYPE, within=pyo.NonNegativeIntegers)
         model.costGenerationInterestRate = pyo.Param(model.STAGE, model.GEN_TYPE, within=pyo.NonNegativeReals)
@@ -147,21 +163,51 @@ class EmpriseModel:
         model.multiPeriodCostGenerationTotalInvestment = pyo.Param(model.STAGE, model.GEN_TYPE, within=pyo.NonNegativeReals)
         model.multiPeriodCostGenerationDecommissioning = pyo.Param(model.STAGE_DECOMMISSIONING, model.GEN_TYPE, within=pyo.NonNegativeReals)
 
+        # --- Storage
+        model.costStorageCapex = pyo.Param(model.STAGE, model.STORAGE_TYPE, within=pyo.NonNegativeReals)
+        model.costStorageDepreciationPeriod = pyo.Param(model.STAGE, model.STORAGE_TYPE, within=pyo.NonNegativeIntegers)
+        model.costStorageInterestRate = pyo.Param(model.STAGE, model.STORAGE_TYPE, within=pyo.NonNegativeReals)
+        model.costStorageOpexVariable = pyo.Param(model.STAGE, model.STORAGE_TYPE, within=pyo.NonNegativeReals)
+        model.costStorageOpexFixed = pyo.Param(model.STAGE, model.STORAGE_TYPE, within=pyo.NonNegativeReals)
+
+        model.multiPeriodCostStorageTotalInvestment = pyo.Param(model.STAGE, model.STORAGE_TYPE, within=pyo.NonNegativeReals)
+        model.multiPeriodCostStorageDecommissioning = pyo.Param(model.STAGE_DECOMMISSIONING, model.STORAGE_TYPE, within=pyo.NonNegativeReals)
+
         # Decision variables ##############################################################################################################
-        # - generationThermal investment: operational, investment, decommissioning
+        # - Bounds rules
+        def _generatorThermalNewCapacity_bounds_rule(model, g, stg):
+            return (0, model.generationThermalPotentialMax[stg, g])
+
+        def _generatorRenewableNewCapacity_bounds_rule(model, g, stg):
+            return (0, model.generationRenewablePotentialMax[stg, g])
+
+        def _electricityStorageNewCapacity_bounds_rule(model, s, stg):
+            return (0, model.storagePotentialMax[stg, s])
+
+        # - generationThermal capacity: operational, investment, decommissioning
         model.generatorThermalCapacity = pyo.Var(model.GEN_THERMAL, model.STAGE_OPERATIONAL, within=pyo.NonNegativeReals)
-        model.generatorThermalNewCapacity = pyo.Var(model.GEN_THERMAL, model.STAGE, within=pyo.NonNegativeReals)
+        model.generatorThermalNewCapacity = pyo.Var(model.GEN_THERMAL, model.STAGE, bounds=_generatorThermalNewCapacity_bounds_rule, within=pyo.NonNegativeReals)
         model.generatorThermalDecommissionedCapacity = pyo.Var(model.GEN_THERMAL, model.STAGE_DECOMMISSIONING, within=pyo.NonNegativeReals)
 
         # - generationRenewable capacity: operational, investment, decommissioning
         model.generatorRenewableCapacity = pyo.Var(model.GEN_RENEWABLE, model.STAGE_OPERATIONAL, within=pyo.NonNegativeReals)
-        model.generatorRenewableNewCapacity = pyo.Var(model.GEN_RENEWABLE, model.STAGE, within=pyo.NonNegativeReals)
+        model.generatorRenewableNewCapacity = pyo.Var(model.GEN_RENEWABLE, model.STAGE, bounds=_generatorRenewableNewCapacity_bounds_rule, within=pyo.NonNegativeReals)
         model.generatorRenewableDecommissionedCapacity = pyo.Var(model.GEN_RENEWABLE, model.STAGE_DECOMMISSIONING, within=pyo.NonNegativeReals)
+
+        # - Electricity storage capacity: operational, investment, decommissioning
+        model.electricityStorageCapacity = pyo.Var(model.STORAGE, model.STAGE_OPERATIONAL, within=pyo.NonNegativeReals)
+        model.electricityStorageNewCapacity = pyo.Var(model.STORAGE, model.STAGE, bounds=_electricityStorageNewCapacity_bounds_rule, within=pyo.NonNegativeReals)
+        model.electricityStorageDecommissionedCapacity = pyo.Var(model.STORAGE, model.STAGE_DECOMMISSIONING, within=pyo.NonNegativeReals)
 
         # - Generator output (bounds set by constraint)
         model.generationThermal = pyo.Var(model.GEN_THERMAL, model.TIME, model.STAGE_OPERATIONAL, within=pyo.NonNegativeReals)
         model.generationRenewable = pyo.Var(model.GEN_RENEWABLE, model.TIME, model.STAGE_OPERATIONAL, within=pyo.NonNegativeReals)
         model.curtailmentRenewable = pyo.Var(model.GEN_RENEWABLE, model.TIME, model.STAGE_OPERATIONAL, within=pyo.NonNegativeReals)
+
+        # - Storage in- and output and level
+        model.generationElectricityStorage = pyo.Var(model.STORAGE, model.TIME, model.STAGE_OPERATIONAL, within=pyo.NonNegativeReals)
+        model.consumptionElectricityStorage = pyo.Var(model.STORAGE, model.TIME, model.STAGE_OPERATIONAL, within=pyo.NonNegativeReals)
+        model.storageLevelElectricityStorage = pyo.Var(model.STORAGE, model.TIME, model.STAGE_OPERATIONAL, within=pyo.NonNegativeReals)
 
         # - Transmission flows
         model.flow1 = pyo.Var(model.BRANCH, model.TIME, model.STAGE, within=pyo.NonNegativeReals)
@@ -195,12 +241,22 @@ class EmpriseModel:
 
         model.c_generationThermalCapacityDecommissioning = pyo.Constraint(model.GEN_THERMAL, model.STAGE_DECOMMISSIONING, rule=generationThermalCapacityDecommissioning_rule)
 
+        def generationThermalCapacityMaximumPotential_rule(model, g, stage):
+            expr = 0
+            for stage_inv in range(stage):
+                expr += model.generatorThermalCapacity[g, stage_inv + 1, stage]
+            expr = expr <= model.generationThermalPotentialMax[stage, g]
+            return expr
+
+        model.c_generationThermalCapacityMaximumPotential = pyo.Constraint(model.GEN_THERMAL, model.STAGE, rule=generationThermalCapacityMaximumPotential_rule)
+
         # - Renewable power generation, capacity expansion and decommissioning
         def maxGeneratorRenewableOutput_rule(model, g, t, *stage):
             tmp_combined_profile = 0.0
             for stg in model.STAGE:
-                tmp_combined_profile += model.operationalStageContribution[stage[0], stage[1], stg, model.generationRenewableType[g]] * model.generationRenewableProfile[stg, g, t]
-            expr = model.generationRenewable[g, t, stage] + model.curtailmentRenewable[g, t, stage] == model.generatorRenewableCapacity[g, stage] * tmp_combined_profile
+                tmp_combined_profile += model.operationalStageContributionGeneration[stage[0], stage[1], stg, model.generationRenewableType[g]] * model.generationRenewableProfile[stg, g, t]
+            expr = model.generationRenewable[g, t, stage] + model.curtailmentRenewable[g, t, stage] == model.generatorRenewableCapacity[g, stage] * self.truncate(tmp_combined_profile, 6)
+            # expr = model.generationRenewable[g, t, stage] * 10 ** 6 + model.curtailmentRenewable[g, t, stage] * 10 ** 6 == model.generatorRenewableCapacity[g, stage] * int(tmp_combined_profile * 10 ** 6)
             return expr
 
         model.c_maxGenRenewable = pyo.Constraint(
@@ -224,6 +280,97 @@ class EmpriseModel:
             return expr
 
         model.c_generationRenewableCapacityDecommissioning = pyo.Constraint(model.GEN_RENEWABLE, model.STAGE_DECOMMISSIONING, rule=generationRenewableCapacityDecommissioning_rule)
+
+        def generationRenewableCapacityMaximumPotential_rule(model, g, stage):
+            expr = 0
+            for stage_inv in range(stage):
+                expr += model.generatorRenewableCapacity[g, stage_inv + 1, stage]
+            expr = expr <= model.generationRenewablePotentialMax[stage, g]
+            return expr
+
+        model.c_generationRenewableCapacityMaximumPotential = pyo.Constraint(model.GEN_RENEWABLE, model.STAGE, rule=generationRenewableCapacityMaximumPotential_rule)
+
+        # - Electricity storage generation, consumption, capacity expansion and decommissioning
+        def electricityStorageCapacity_rule(model, s, *stage):
+            if stage[0] == stage[1]:  # TODO: add pre-existing capacity parameter for initial stage, i.e. stage[0] == 1
+                expr = model.electricityStorageCapacity[s, stage] == model.electricityStorageNewCapacity[s, stage[0]]
+            else:
+                expr = model.electricityStorageCapacity[s, stage] == model.electricityStorageCapacity[s, stage[0], stage[1] - 1] - model.electricityStorageDecommissionedCapacity[s, stage]
+            return expr
+
+        model.c_electricityStorageCapacity = pyo.Constraint(model.STORAGE, model.STAGE_OPERATIONAL, rule=electricityStorageCapacity_rule)
+
+        def electricityStorageCapacityDecommissioning_rule(model, s, *stage):
+            expr = model.electricityStorageDecommissionedCapacity[s, stage] <= model.electricityStorageCapacity[s, stage[0], stage[1] - 1]
+            return expr
+
+        model.c_electricityStorageCapacityDecommissioning = pyo.Constraint(model.STORAGE, model.STAGE_DECOMMISSIONING, rule=electricityStorageCapacityDecommissioning_rule)
+
+        def electricityStorageCapacityMaximumPotential_rule(model, s, stage):
+            expr = 0
+            for stage_inv in range(stage):
+                expr += model.electricityStorageCapacity[s, stage_inv + 1, stage]
+            expr = expr <= model.storagePotentialMax[stage, s]
+            return expr
+
+        model.c_electricityStorageCapacityMaximumPotential = pyo.Constraint(model.STORAGE, model.STAGE, rule=electricityStorageCapacityMaximumPotential_rule)
+
+        def maxElectricityStorageOutput_rule(model, s, t, *stage):
+            expr = model.generationElectricityStorage[s, t, stage] <= model.electricityStorageCapacity[s, stage]
+            return expr
+
+        model.c_maxElectricityStorageOutput = pyo.Constraint(
+            model.STORAGE,
+            model.TIME,
+            model.STAGE_OPERATIONAL,
+            rule=maxElectricityStorageOutput_rule,
+        )
+
+        def maxElectricityStorageInput_rule(model, s, t, *stage):
+            expr = model.consumptionElectricityStorage[s, t, stage] <= model.electricityStorageCapacity[s, stage]
+            return expr
+
+        model.c_maxElectricityStorageInput = pyo.Constraint(
+            model.STORAGE,
+            model.TIME,
+            model.STAGE_OPERATIONAL,
+            rule=maxElectricityStorageInput_rule,
+        )
+
+        def maxElectricityStorageLevel_rule(model, s, t, *stage):
+            expr = model.storageLevelElectricityStorage[s, t, stage] <= model.electricityStorageCapacity[s, stage] * model.storageRatioVolume[s]
+            return expr
+
+        model.c_maxElectricityStorageLevel = pyo.Constraint(
+            model.STORAGE,
+            model.TIME,
+            model.STAGE_OPERATIONAL,
+            rule=maxElectricityStorageLevel_rule,
+        )
+
+        def electricityStorageContinuity_rule(model, s, t, *stage):
+            expr = 0
+            if t < max(model.TIME):
+                expr = model.storageLevelElectricityStorage[s, t + 1, stage] == (1 - model.storageSelfDischargeRate[s]) * model.storageLevelElectricityStorage[s, t, stage] + model.storageEtaIn[
+                    s
+                ] * model.consumptionElectricityStorage[s, t, stage] - model.generationElectricityStorage[s, t, stage] * self.truncate(
+                    1 / model.storageEtaOut[s], 6
+                )  # Storage continuity equation
+            else:
+                expr = (
+                    model.storageLevelElectricityStorage[s, t, stage]
+                    + model.storageEtaIn[s] * model.consumptionElectricityStorage[s, t, stage]
+                    - model.generationElectricityStorage[s, t, stage] * self.truncate(1 / model.storageEtaOut[s], 6)
+                    >= model.storageLevelElectricityStorage[s, min(model.TIME), stage]
+                )  # Final equal to initial storage level of a representative period or the full year
+            return expr
+
+        model.c_electricityStorageContinuity = pyo.Constraint(
+            model.STORAGE,
+            model.TIME,
+            model.STAGE_OPERATIONAL,
+            rule=electricityStorageContinuity_rule,
+        )
 
         # - Transmission flows
         def maxTransmissionLimit_rule(model, n1, n2, t, stage):
@@ -253,13 +400,20 @@ class EmpriseModel:
                 if model.convLoadNode[c] == n:
                     if model.convLoadAnnualDemand[c] != -1:
                         # expr += -model.convLoadAnnualDemand[c] * model.convLoadProfile[c, t] / sum(model.convLoadProfile[c, t1] for t1 in model.TIME)
-                        expr += -model.convLoadProfile[stage, c, t] * (1.0 + 0.05 * stage)
+                        expr -= self.truncate(model.convLoadProfile[stage, c, t] * (1.0 + 0.05 * stage), 6)
                     else:
-                        expr += -model.convLoadProfile[stage, c, t] * (1.0 + 0.05 * stage)
+                        expr -= self.truncate(model.convLoadProfile[stage, c, t] * (1.0 + 0.05 * stage), 6)
+
+            # Electricity storage
+            for su in model.STORAGE:
+                if model.storageNode[su] == n:
+                    for s in range(1, stage + 1):
+                        expr += model.generationElectricityStorage[su, t, s, stage]
+                        expr -= model.consumptionElectricityStorage[su, t, s, stage]
 
             expr += sum(model.flow1[i, n, t, stage] for i in model.NODE_IN[n])
-            expr += -sum(model.flow2[i, n, t, stage] for i in model.NODE_IN[n]) / 0.97  # TODO: Include transmission loss factors as parameters
-            expr += -sum(model.flow1[n, j, t, stage] for j in model.NODE_OUT[n]) / 0.97  # TODO: Include transmission loss factors as parameters
+            expr += -sum(model.flow2[i, n, t, stage] for i in model.NODE_IN[n]) * self.truncate(1 / 0.97, 6)  # TODO: Include transmission loss factors as parameters
+            expr += -sum(model.flow1[n, j, t, stage] for j in model.NODE_OUT[n]) * self.truncate(1 / 0.97, 6)  # TODO: Include transmission loss factors as parameters
             expr += sum(model.flow2[n, j, t, stage] for j in model.NODE_OUT[n])
 
             expr = expr == 0
@@ -312,37 +466,54 @@ class EmpriseModel:
 
     def getCostInvestments(self, model, stage, includeRelativeOpex=False, subtractSalvage=True):
         """Investment cost, including lifetime OPEX (NPV)"""
-        costInv = 0.0
+        cost_investment = 0.0
 
         for g in model.GEN_THERMAL:
-            costInv += self.getCostInvestmentGeneration(model, g, stage, "thermal")
+            cost_investment += self.getCostInvestmentByUnitGroup(model, g, stage, "generationThermal")  # unit_group = "generationThermal"
 
         for g in model.GEN_RENEWABLE:
-            costInv += self.getCostInvestmentGeneration(model, g, stage, "renewable")
+            cost_investment += self.getCostInvestmentByUnitGroup(model, g, stage, "generationRenewable")  # unit_group = "generationRenewable"
 
-        return costInv
+        for s in model.STORAGE:
+            cost_investment += self.getCostInvestmentByUnitGroup(model, s, stage, "electricityStorage")  # unit_group = "electricityStorage"
 
-    def getCostInvestmentGeneration(self, model, g, stage, gen_group=None):
-        """Expression for cost of generator, investment cost no discounting"""
-        costGen = 0.0
-        if gen_group == "thermal":
-            gen_type = model.generationThermalType[g]
-            costGen += model.multiPeriodCostGenerationTotalInvestment[stage, gen_type] * model.generatorThermalNewCapacity[g, stage]
+        return cost_investment
+
+    def getCostInvestmentByUnitGroup(self, model, u, stage, unit_group=None):
+        """Expression for investment cost of specified unit group"""
+        cost_investment = 0.0
+        if unit_group == "generationThermal":
+            gen_type = model.generationThermalType[u]
+            cost_investment += self.truncate(model.multiPeriodCostGenerationTotalInvestment[stage, gen_type], 6) * model.generatorThermalNewCapacity[u, stage]
             for stg_dec in range(stage + 1, model.numberOfStages + 1):  # e.g. investment in 'stage' = 1, corresponding decommissioning in stages [2, 3, 4]
-                costGen -= model.multiPeriodCostGenerationDecommissioning[stage, stg_dec, gen_type] * model.generatorThermalDecommissionedCapacity[g, stage, stg_dec]
-        elif gen_group == "renewable":
-            gen_type = model.generationRenewableType[g]
-            costGen += model.multiPeriodCostGenerationTotalInvestment[stage, gen_type] * model.generatorRenewableNewCapacity[g, stage]
+                cost_investment -= self.truncate(model.multiPeriodCostGenerationDecommissioning[stage, stg_dec, gen_type], 6) * model.generatorThermalDecommissionedCapacity[u, stage, stg_dec]
+        elif unit_group == "generationRenewable":
+            gen_type = model.generationRenewableType[u]
+            cost_investment += self.truncate(model.multiPeriodCostGenerationTotalInvestment[stage, gen_type], 6) * model.generatorRenewableNewCapacity[u, stage]
             for stg_dec in range(stage + 1, model.numberOfStages + 1):  # e.g. investment in 'stage' = 1, corresponding decommissioning in stages [2, 3, 4]
-                costGen -= model.multiPeriodCostGenerationDecommissioning[stage, stg_dec, gen_type] * model.generatorRenewableDecommissionedCapacity[g, stage, stg_dec]
+                cost_investment -= self.truncate(model.multiPeriodCostGenerationDecommissioning[stage, stg_dec, gen_type], 6) * model.generatorRenewableDecommissionedCapacity[u, stage, stg_dec]
+        elif unit_group == "electricityStorage":
+            storage_type = model.storageType[u]
+            cost_investment += self.truncate(model.multiPeriodCostStorageTotalInvestment[stage, storage_type], 6) * model.electricityStorageNewCapacity[u, stage]
+            for stg_dec in range(stage + 1, model.numberOfStages + 1):  # e.g. investment in 'stage' = 1, corresponding decommissioning in stages [2, 3, 4]
+                cost_investment -= self.truncate(model.multiPeriodCostStorageDecommissioning[stage, stg_dec, storage_type], 6) * model.electricityStorageDecommissionedCapacity[u, stage, stg_dec]
         else:
-            print("\n!!! ERROR WRONG OR NO GENERATOR GROUP SPECIFIED WHEN OBTAINING INVESTMENT COST !!!\n")
+            print("\n!!! ERROR WRONG OR NO UNIT GROUP SPECIFIED WHEN OBTAINING INVESTMENT COST !!!\n")
 
-        return costGen
+        return cost_investment
 
     def getCostSystemOperation(self, model, stage):
         """Operational costs: cost of gen, load shed (NPV)"""
-        costSysOp = 0.0
+        cost_system_operation = 0.0
+
+        (discount_factor_sum, discount_factor_perpetuity) = self.getDiscountFactorSum(pyo.value(model.financePresentValueInterestRate), stage, model.yearsPerStage)
+
+        if stage == pyo.value(model.numberOfStages):
+            discount_factor_sum = discount_factor_sum + discount_factor_perpetuity
+        else:
+            del discount_factor_perpetuity
+            # print(discount_factor_sum)
+        print("Stage: " + str(stage), "Discount factor sum: " + str(discount_factor_sum), "Period weight factor: " + str(pyo.value(model.periodWeightFactor)))
 
         for stage_operational_idx in model.STAGE_OPERATIONAL:
             if stage_operational_idx[1] == stage:
@@ -368,35 +539,31 @@ class EmpriseModel:
                     #         operational_stage[stage[0] - 1, :], np.asarray([model.generationRenewableProfile[s + 1, g, t] for s in range(operational_stage.shape[1])])
                     #     ).sum()  # Weighted sum of renewable availability = sum(Investment period weigths * renewable availability profile)
 
-                    costSysOp += sum(
+                    cost_system_operation += pyo.quicksum(
                         model.generationThermal[g, t, stage_operational_idx]
                         * model.periodWeightFactor
                         / model.generationThermalEta[g]
                         * (model.costSystemOperationFuel[model.generationThermalFuel[g]] + model.emissionFactor[model.generationThermalFuel[g]] * model.costSystemOperationEmissionPrice[stage])
+                        * discount_factor_sum
                         for g in model.GEN_THERMAL
                     )
 
                     # Renewable generation units
-                    costSysOp += sum(
-                        model.generationRenewable[g, t, stage_operational_idx] * model.costGenerationOpexVariable[stage, model.generationRenewableType[g]] * model.periodWeightFactor for g in model.GEN_RENEWABLE
+                    cost_system_operation += pyo.quicksum(
+                        model.generationRenewable[g, t, stage_operational_idx] * model.costGenerationOpexVariable[stage, model.generationRenewableType[g]] * model.periodWeightFactor * discount_factor_sum
+                        for g in model.GEN_RENEWABLE
                     )
 
-        discount_factor_sum = self.getDiscountFactorSum(
-            model.financePresentValueInterestRate,
-            stage,
-            model.yearsPerStage,
-            allocation_method="center",
-        )
+                    # Electricity storage units
+                    cost_system_operation += pyo.quicksum(
+                        (model.generationElectricityStorage[s, t, stage_operational_idx] + model.consumptionElectricityStorage[s, t, stage_operational_idx])
+                        * model.costStorageOpexVariable[stage, model.storageType[s]]
+                        * model.periodWeightFactor
+                        * discount_factor_sum
+                        for s in model.STORAGE
+                    )
 
-        # print("SYSOP", discount_factor_sum, pyo.value(model.numberOfStages))
-
-        if stage == pyo.value(model.numberOfStages):
-            discount_factor_sum = discount_factor_sum * (1 + 1 / model.financePresentValueInterestRate)
-            # print(discount_factor_sum)
-
-        costSysOp = costSysOp * discount_factor_sum
-
-        return costSysOp
+        return cost_system_operation
 
     def createConcreteModel(self, dict_data):
         """Create concrete Pyomo model for EMPRISE problem
@@ -451,6 +618,7 @@ class EmpriseModel:
         di["generationThermalType"] = {}
         di["generationThermalFuel"] = {}
         di["generationThermalEta"] = {}
+        di["generationThermalPotentialMax"] = {}
         k = 0
         for it, row in input_data.generator_thermal.iterrows():
             if row["node"] in di["NODE"][None]:
@@ -458,19 +626,22 @@ class EmpriseModel:
                 di["generationThermalType"][k] = row["type"]
                 di["generationThermalFuel"][k] = row["fuel"]
                 di["generationThermalEta"][k] = row["eta"]
+                for stg in range(1, input_data.number_of_stages + 1):
+                    di["generationThermalPotentialMax"][(stg, k)] = float(row["potential_max"].split("::")[stg - 1])
                 k = k + 1
         di["GEN_THERMAL"] = {None: range(k)}
         di["GEN_THERMAL_TYPE"] = {None: sorted(set(di["generationThermalType"].values()))}
         del k
-        di["financeDeprecationPeriodGenerationThermal"] = {
-            k: input_data.general["finance"]["deprecationPeriod"]["generationThermal"][k] for k in input_data.general["finance"]["deprecationPeriod"]["generationThermal"].keys() & di["GEN_THERMAL_TYPE"][None]
-        }
+        # di["financeDeprecationPeriodGenerationThermal"] = {
+        #     k: input_data.general["finance"]["deprecationPeriod"]["generationThermal"][k] for k in input_data.general["finance"]["deprecationPeriod"]["generationThermal"].keys() & di["GEN_THERMAL_TYPE"][None]
+        # }
 
         # --- Generation renewable
         di["generationRenewableNode"] = {}
         di["generationRenewableType"] = {}
         di["generationRenewableIec"] = {}
         di["generationRenewableLcoe"] = {}
+        di["generationRenewablePotentialMax"] = {}
         di["generationRenewableProfile"] = {}
         k = 0
         for it, row in input_data.generator_renewable.iterrows():
@@ -481,6 +652,7 @@ class EmpriseModel:
                 di["generationRenewableLcoe"][k] = "LCOE_" + str(row["lcoe"])
                 ref = row["node"]
                 for stg in range(1, input_data.number_of_stages + 1):
+                    di["generationRenewablePotentialMax"][(stg, k)] = float(row["potential_max"].split("::")[stg - 1])
                     # print(stg, stg - 1)
                     for i, t in enumerate(input_data.time_range):
                         if row["type"].startswith("SOLAR"):
@@ -510,9 +682,9 @@ class EmpriseModel:
         di["GEN_RENEWABLE"] = {None: range(k)}
         di["GEN_RENEWABLE_TYPE"] = {None: sorted(set(di["generationRenewableType"].values()))}
         del k
-        di["financeDeprecationPeriodGenerationRenewable"] = {
-            k: input_data.general["finance"]["deprecationPeriod"]["generationRenewable"][k] for k in input_data.general["finance"]["deprecationPeriod"]["generationRenewable"].keys() & di["GEN_RENEWABLE_TYPE"][None]
-        }
+        # di["financeDeprecationPeriodGenerationRenewable"] = {
+        #     k: input_data.general["finance"]["deprecationPeriod"]["generationRenewable"][k] for k in input_data.general["finance"]["deprecationPeriod"]["generationRenewable"].keys() & di["GEN_RENEWABLE_TYPE"][None]
+        # }
 
         # --- Conventional load
         di["convLoadAnnualDemand"] = {}
@@ -531,6 +703,33 @@ class EmpriseModel:
         di["LOAD"] = {None: range(k)}
         del k
 
+        # --- Storage
+        di["storageNode"] = {}
+        di["storageType"] = {}
+        di["storageEtaOut"] = {}
+        di["storageEtaIn"] = {}
+        di["storageRatioVolume"] = {}
+        di["storageSelfDischargeRate"] = {}
+        di["storageDepthOfDischarge"] = {}
+        di["storagePotentialMax"] = {}
+        k = 0
+        for it, row in input_data.storage.iterrows():
+            if row["node"] in di["NODE"][None]:
+                di["storageNode"][k] = row["node"]
+                di["storageType"][k] = row["type"]
+                di["storageEtaOut"][k] = row["eta_out"]
+                di["storageEtaIn"][k] = row["eta_in"]
+                di["storageRatioVolume"][k] = row["ratio_volume"]
+                di["storageSelfDischargeRate"][k] = row["sdr"]
+                di["storageDepthOfDischarge"][k] = row["dod"]
+                for stg in range(1, input_data.number_of_stages + 1):
+                    di["storagePotentialMax"][(stg, k)] = float(row["potential_max"].split("::")[stg - 1])
+                k = k + 1
+        di["STORAGE"] = {None: range(k)}
+        di["STORAGE_TYPE"] = {None: sorted(set(di["storageType"].values()))}
+        del k
+
+        # --- Cross-border exchange
         di["branchDistance"] = {}
         di["branchType"] = {}
         di["branchExistingCapacity"] = {}
@@ -547,16 +746,23 @@ class EmpriseModel:
         di["costSystemOperationEmissionPrice"] = input_data.cost["systemOperation"]["emissionPrice"]  # EUR/tCO2eq
 
         # --- Investment costs
-        di["costInvestmentThermalCapex"] = {k: input_data.cost["investment"]["capexThermal"][k] for k in input_data.cost["investment"]["capexThermal"].keys() & di["GEN_THERMAL_TYPE"][None]}  # EUR/MW
-        di["costInvestmentThermalOpex"] = {k: input_data.cost["investment"]["opexThermal"][k] for k in input_data.cost["investment"]["opexThermal"].keys() & di["GEN_THERMAL_TYPE"][None]}  # EUR/MW/a
-        di["costInvestmentRenewableCapex"] = {k: input_data.cost["investment"]["capexRenewable"][k] for k in input_data.cost["investment"]["capexRenewable"].keys() & di["GEN_RENEWABLE_TYPE"][None]}  # EUR/MW
-        di["costInvestmentRenewableOpex"] = {k: input_data.cost["investment"]["opexRenewable"][k] for k in input_data.cost["investment"]["opexRenewable"].keys() & di["GEN_RENEWABLE_TYPE"][None]}  # EUR/MW/a
+        # di["costInvestmentThermalCapex"] = {k: input_data.cost["investment"]["capexThermal"][k] for k in input_data.cost["investment"]["capexThermal"].keys() & di["GEN_THERMAL_TYPE"][None]}  # EUR/MW
+        # di["costInvestmentThermalOpex"] = {k: input_data.cost["investment"]["opexThermal"][k] for k in input_data.cost["investment"]["opexThermal"].keys() & di["GEN_THERMAL_TYPE"][None]}  # EUR/MW/a
+        # di["costInvestmentRenewableCapex"] = {k: input_data.cost["investment"]["capexRenewable"][k] for k in input_data.cost["investment"]["capexRenewable"].keys() & di["GEN_RENEWABLE_TYPE"][None]}  # EUR/MW
+        # di["costInvestmentRenewableOpex"] = {k: input_data.cost["investment"]["opexRenewable"][k] for k in input_data.cost["investment"]["opexRenewable"].keys() & di["GEN_RENEWABLE_TYPE"][None]}  # EUR/MW/a
 
         di["costGenerationCapex"] = {}
         di["costGenerationDepreciationPeriod"] = {}
         di["costGenerationInterestRate"] = {}
         di["costGenerationOpexVariable"] = {}
         di["costGenerationOpexFixed"] = {}
+
+        di["costStorageCapex"] = {}
+        di["costStorageDepreciationPeriod"] = {}
+        di["costStorageInterestRate"] = {}
+        di["costStorageOpexVariable"] = {}
+        di["costStorageOpexFixed"] = {}
+
         for stg in range(1, input_data.number_of_stages + 1):
             for k, row in input_data.cost_generation.iterrows():
                 gen_type = row["type"]
@@ -566,14 +772,26 @@ class EmpriseModel:
                     di["costGenerationInterestRate"][(stg, gen_type)] = float(row["interest_rate"].split("::")[stg - 1])  # p.u.
                     di["costGenerationOpexVariable"][(stg, gen_type)] = float(row["opex_variable"].split("::")[stg - 1])  # EUR/MWh
                     di["costGenerationOpexFixed"][(stg, gen_type)] = float(row["opex_fixed"].split("::")[stg - 1])  # EUR/MW/a
+            for k, row in input_data.cost_storage.iterrows():
+                storage_type = row["type"]
+                if storage_type in di["STORAGE_TYPE"][None]:
+                    di["costStorageCapex"][(stg, storage_type)] = float(row["capex"].split("::")[stg - 1])  # EUR/MW
+                    di["costStorageDepreciationPeriod"][(stg, storage_type)] = int(row["depreciation"].split("::")[stg - 1])  # a
+                    di["costStorageInterestRate"][(stg, storage_type)] = float(row["interest_rate"].split("::")[stg - 1])  # p.u.
+                    di["costStorageOpexVariable"][(stg, storage_type)] = float(row["opex_variable"].split("::")[stg - 1])  # EUR/MWh
+                    di["costStorageOpexFixed"][(stg, storage_type)] = float(row["opex_fixed"].split("::")[stg - 1])  # EUR/MW/a
 
         tmp_stage = range(1, 1 + di["numberOfStages"][None])
         tmp_stage_operational = [(x, y) for x in tmp_stage for y in tmp_stage if x <= y]
         tmp_stage_decommissioning = [(x, y) for x in tmp_stage for y in tmp_stage if x < y]
 
-        di["operationalStageContribution"] = {}
+        di["operationalStageContributionGeneration"] = {}
         di["multiPeriodCostGenerationTotalInvestment"] = {}
         di["multiPeriodCostGenerationDecommissioning"] = {}
+
+        di["operationalStageContributionStorage"] = {}
+        di["multiPeriodCostStorageTotalInvestment"] = {}
+        di["multiPeriodCostStorageDecommissioning"] = {}
         for stg_op in tmp_stage_operational:
             for gen_type in di["GEN_THERMAL_TYPE"][None] + di["GEN_RENEWABLE_TYPE"][None]:
                 (total_cost, decommissioning_redemption, operational_stage_contribution_matrix) = self.getMultiPeriodInformation(
@@ -598,8 +816,28 @@ class EmpriseModel:
 
                 for stg in tmp_stage:
                     # print((stg_op[0], stg_op[1], stg, gen_type), operational_stage_contribution_matrix[stg_op[1] - 1, stg - 1])
-                    di["operationalStageContribution"][(stg_op[0], stg_op[1], stg, gen_type)] = operational_stage_contribution_matrix[stg_op[1] - 1, stg - 1]
+                    di["operationalStageContributionGeneration"][(stg_op[0], stg_op[1], stg, gen_type)] = operational_stage_contribution_matrix[stg_op[1] - 1, stg - 1]
 
+            for storage_type in di["STORAGE_TYPE"][None]:
+                (total_cost, decommissioning_redemption, operational_stage_contribution_matrix) = self.getMultiPeriodInformation(
+                    [di["costStorageCapex"][(x, storage_type)] for x in tmp_stage],
+                    [di["costStorageOpexFixed"][(x, storage_type)] for x in tmp_stage],
+                    [di["costStorageInterestRate"][(x, storage_type)] for x in tmp_stage],
+                    di["financePresentValueInterestRate"][None],
+                    [di["costStorageDepreciationPeriod"][(x, storage_type)] for x in tmp_stage],
+                    stg_op[0],
+                    di["numberOfStages"][None],
+                    di["yearsPerStage"][None],
+                    False,
+                )
+
+                if stg_op[0] == stg_op[1]:
+                    di["multiPeriodCostStorageTotalInvestment"][(stg_op[0], storage_type)] = total_cost
+                else:
+                    di["multiPeriodCostStorageDecommissioning"][(stg_op[0], stg_op[1], storage_type)] = decommissioning_redemption[stg_op[1] - stg_op[0] - 1]
+
+                for stg in tmp_stage:
+                    di["operationalStageContributionStorage"][(stg_op[0], stg_op[1], stg, storage_type)] = operational_stage_contribution_matrix[stg_op[1] - 1, stg - 1]
         return {"emprise": di}
 
     def updateOperationalScenarioInformation(self, dict_data, input_data, sysop_sc, reference_years):
@@ -680,6 +918,7 @@ class EmpriseModel:
         # inv decisions:    yes     yes     yes     no
         # sysop decisions:  no      yes     yes     yes
         # #nodes:           1       4       16      32
+
         for stage in range(1, n_stages + 2):
             if stage == n_stages + 1:  # Last stage with nodes only representing system operation decisions
                 node_range = range(1, (n_inv_sc * n_sysop_sc) ** (stage - 2) * n_sysop_sc + 1)
@@ -699,17 +938,23 @@ class EmpriseModel:
                 if stage <= n_stages:
                     dec_var_names.append("generatorThermalNewCapacity[*,{}]".format(stage))
                     dec_var_names.append("generatorRenewableNewCapacity[*,{}]".format(stage))
+                    dec_var_names.append("electricityStorageNewCapacity[*,{}]".format(stage))
                     dec_var_names.append("generatorThermalCapacity[*,*,{}]".format(stage))
                     dec_var_names.append("generatorRenewableCapacity[*,*,{}]".format(stage))
+                    dec_var_names.append("electricityStorageCapacity[*,*,{}]".format(stage))
                     if stage > 1:
                         dec_var_names.append("generatorRenewableDecommissionedCapacity[*,*,{}]".format(stage))
                         dec_var_names.append("generatorThermalDecommissionedCapacity[*,*,{}]".format(stage))
+                        dec_var_names.append("electricityStorageDecommissionedCapacity[*,*,{}]".format(stage))
 
                 if stage > 1:  # first stage only has investment decisions
                     # print(stage, "generationThermal[*,*,*,{}]".format(stage - 1))
                     der_dec_var_names.append("generationThermal[*,*,*,{}]".format(stage - 1))
                     der_dec_var_names.append("generationRenewable[*,*,*,{}]".format(stage - 1))
                     der_dec_var_names.append("curtailmentRenewable[*,*,*,{}]".format(stage - 1))
+                    der_dec_var_names.append("generationElectricityStorage[*,*,*,{}]".format(stage - 1))
+                    der_dec_var_names.append("consumptionElectricityStorage[*,*,*,{}]".format(stage - 1))
+                    der_dec_var_names.append("storageLevelElectricityStorage[*,*,*,{}]".format(stage - 1))
                     der_dec_var_names.append("flow1[*,*,*,{}]".format(stage - 1))
                     der_dec_var_names.append("flow2[*,*,*,{}]".format(stage - 1))
 
@@ -1022,7 +1267,7 @@ class EmpriseModel:
         return (total_cost, decommissioning_redemption, operational_stage_contribution)  # operational_stage_idx currently not used
 
     @staticmethod
-    def getDiscountFactorSum(interest_rate, stage, years_per_stage, allocation_method="center"):
+    def getDiscountFactorSum(interest_rate, stage, years_per_stage, allocation_method=""):
         """Calculates the stage-specific discount factor as a sum over all years belonging to the decision stage.
         The allocation method determines how the summation window is configured, i.e. does the given decision stage refer to the starting year or the centre of the years
         """
@@ -1031,9 +1276,12 @@ class EmpriseModel:
         relevant_years = np.arange((stage - 1) * years_per_stage, stage * years_per_stage)
         if allocation_method == "center":
             relevant_years = relevant_years - int(years_per_stage / 2)
-        dsc = 1 / (1 + interest_rate) ** relevant_years
-        dsc[dsc > 1] = 1  # relevant for years before current year (years_per_stage/2), only for center method
-        return sum(dsc)
+        discount_factor = 1 / (1 + interest_rate) ** relevant_years
+        # discount_factor[discount_factor > 1] = 1  # relevant for years before current year (years_per_stage/2), only for center method
+        discount_factor_sum = sum(discount_factor)
+        print(type(interest_rate))
+        discount_factor_perpetuity = discount_factor[-1] / interest_rate
+        return (discount_factor_sum, discount_factor_perpetuity)
 
     @staticmethod
     def parseScenarioInformation(stage, node, n_stages, n_inv_sc, n_sysop_sc):
@@ -1064,3 +1312,7 @@ class EmpriseModel:
             sysop_sc = [1]
             inv_sc = [1]
         return (sysop_sc, inv_sc)
+
+    @staticmethod
+    def truncate(x, precision=4):
+        return int(x * 10 ** precision) / 10 ** precision

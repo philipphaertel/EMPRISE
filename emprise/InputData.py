@@ -32,9 +32,11 @@ class InputData(object):
         self.generator_thermal = None
         self.generator_renewable = None
         self.consumer_conventional = None
+        self.storage = None
         self.branch = None
         self.cost = None
         self.cost_generation = None
+        self.cost_storage = None
 
         self.ts_consumer_conventional = None
         self.ts_generator_wind = None
@@ -53,8 +55,6 @@ class InputData(object):
             "uranium": 0.0,
         }  # tCO2eq/MWh_th
 
-        self.CSV_SEPARATOR = None  # automatically detect
-
     def readStructuralData(self, file_path):
         """Read structural input data from files into data variables
         file_path: Dictionary with file paths to input data components (Example: file_path['nodes'] = '/data/nodes.csv')
@@ -63,20 +63,6 @@ class InputData(object):
         self.general = {
             "finance": {
                 "interestRate": 0.03,  # p.u. (annual interest rate)
-                "deprecationPeriod": {
-                    "generationThermal": {
-                        "CCGT": 30,
-                        "OCGT": 30,
-                        "ST": 40,
-                    },  # not used anymore (needs to be removed)
-                    "generationRenewable": {
-                        "ONSHORE_IEC_1": 20,
-                        "ONSHORE_IEC_3": 20,
-                        "OFFSHORE_IEC_1": 20,
-                        "SOLAR_ROOFTOP": 25,
-                        "SOLAR_UTILITY": 25,
-                    },  # not used anymore (needs to be removed)
-                },
             },
             "willingnessToPay": 500.0,  # EUR/MWh
             "yearsPerStage": 10,
@@ -105,7 +91,7 @@ class InputData(object):
                 "type": str,
                 "fuel": str,
                 "eta": float,
-                "potential": float,
+                "potential_max": str,
             },
         )
         self.generator_renewable = pd.read_csv(
@@ -115,7 +101,7 @@ class InputData(object):
                 "type": str,
                 "iec": int,
                 "lcoe": int,
-                "potential": float,
+                "potential_max": str,
             },
         )
         self.consumer_conventional = pd.read_csv(
@@ -123,8 +109,36 @@ class InputData(object):
             dtype={"node": str, "annualDemand": float},
         )
 
+        self.storage = pd.read_csv(
+            file_path["storage"],
+            dtype={
+                "type": str,
+                "node": str,
+                "desc": str,
+                "eta_out": float,
+                "eta_in": float,
+                "ratio_volume": float,
+                "sdr": float,
+                "dod": float,
+                "potential_max": str,
+            },
+        )
+
         self.cost_generation = pd.read_csv(
             file_path["cost_generation"],
+            dtype={
+                "type": str,
+                "subtype": str,
+                "depreciation": str,
+                "interest_rate": str,
+                "capex": str,
+                "opex_variable": str,
+                "opex_fixed": str,
+            },
+        )
+
+        self.cost_storage = pd.read_csv(
+            file_path["cost_storage"],
             dtype={
                 "type": str,
                 "subtype": str,
@@ -239,8 +253,8 @@ class InputData(object):
     def getAllAreas(self):
         """Return list of areas included in the model"""
         areas = self.node["area"]
-        allareas = []
+        all_areas = []
         for area in areas:
-            if area not in allareas:
-                allareas.append(area)
-        return allareas
+            if area not in all_areas:
+                all_areas.append(area)
+        return all_areas
