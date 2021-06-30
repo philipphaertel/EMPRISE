@@ -9,7 +9,7 @@ import emprise
 import numpy as np
 import json
 
-from pyutilib.services import TempfileManager
+from pyomo.common.tempfiles import TempfileManager
 
 import pyomo.environ as pyo
 
@@ -17,14 +17,14 @@ import pyomo.environ as pyo
 
 # Scenario (tree) configuration
 scenario_name = "test"
-scenario_variant = "sto_inv"
-scenario_variant = "det_inv_high"
+scenario_variant = "storage"
+# scenario_variant = "det_inv_high"
 
-print("### Initializing EMPRISE framework for scenario setup '" + scenario_name + "' ###")
+exclude_component_list = ["electricity_storage"]  # []  # ["electricity_storage"], []
 
-sample_size = 1 * 14 * 24  # hourly time steps of system operation sample
+sample_size = 6 * 30 * 24  # hourly time steps of system operation sample
 sample_offset = 26 * 7 * 24  # offset of system operation sample
-reference_years = [2012]  # [2006, 2008]  # [2007, 2008, 2011]
+reference_years = [2012]  # [2010, 2012]  # [2006, 2008]  # [2007, 2008, 2011]
 
 number_of_stages = 3  # Planning periods, e.g. 3 (representing planning periods 2025, 2035, 2045)
 number_of_investment_scenarios = 2
@@ -38,13 +38,14 @@ scenario_probability_inv = {"inv_" + str(i): [0.7, 0.3] for i in range(1, number
 # scenario_probability_inv = {"inv_" + str(i): [1.0] for i in range(1, number_of_stages + 1)}
 scenario_probability = {**scenario_probability_inv, **scenario_probability_sysop}
 
-
 # --- Path and directory information
 data_folder_name = "data"
 plot_folder_name = "plot"
 result_folder_name = "result/" + scenario_name
 json_file_name = "ef_solution.json"
 cluster_working_directory = "/home/phaertel/python/simulations"
+
+print("### Initializing EMPRISE framework for scenario setup '" + scenario_name_extended + "' ###")
 
 
 def checkAndCreateDirectory(directory):
@@ -107,7 +108,7 @@ n_header_rows_timeseries = {
 }
 
 # Create abstract model
-emprise_model = emprise.EmpriseModel()
+emprise_model = emprise.EmpriseModel(exclude_component_list=exclude_component_list)
 
 if __name__ == "__main__":
     # --- Retrieve EMPRISE input data

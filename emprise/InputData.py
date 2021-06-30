@@ -51,9 +51,9 @@ class InputData(object):
 
         # Constants
         self.const_emission_factor = {
-            "natural_gas": 56.0 * 3.6 / 1000.0,
+            "natural_gas": 56.0 * 3.6,
             "uranium": 0.0,
-        }  # tCO2eq/MWh_th
+        }  # tCO2eq/GWh_th
 
     def readStructuralData(self, file_path):
         """Read structural input data from files into data variables
@@ -64,7 +64,7 @@ class InputData(object):
             "finance": {
                 "interestRate": 0.03,  # p.u. (annual interest rate)
             },
-            "willingnessToPay": 500.0,  # EUR/MWh
+            "willingnessToPay": 500.0 * 1000.0,  # EUR/GWh
             "yearsPerStage": 10,
         }
 
@@ -112,6 +112,7 @@ class InputData(object):
         self.storage = pd.read_csv(
             file_path["storage"],
             dtype={
+                "include": bool,
                 "type": str,
                 "node": str,
                 "desc": str,
@@ -152,34 +153,8 @@ class InputData(object):
 
         self.cost = {
             "systemOperation": {
-                "fuel": {"natural_gas": 0.00003, "uranium": 0.000005},  # MEUR/MWh
+                "fuel": {"natural_gas": 0.03, "uranium": 0.005},  # MEUR/GWh_th
                 "emissionPrice": {stage: 0.0 for stage in range(1, self.number_of_stages + 1)},
-            },
-            "investment": {
-                "capexThermal": {
-                    "CCGT": 750000.0,
-                    "OCGT": 420000.0,
-                    "ST": 1000000.0,
-                },  # EUR/MW # not used anymore (needs to be removed)
-                "opexThermal": {
-                    "CCGT": 30000.0,
-                    "OCGT": 8000.0,
-                    "ST": 15000.0,
-                },  # EUR/MW/a # not used anymore (needs to be removed)
-                "capexRenewable": {
-                    "ONSHORE_IEC_1": 1100000.0,
-                    "ONSHORE_IEC_3": 1400000.0,
-                    "OFFSHORE_IEC_1": 3700000.0,
-                    "SOLAR_ROOFTOP": 514000.0,
-                    "SOLAR_UTILITY": 712000.0,
-                },  # EUR/MW # not used anymore (needs to be removed)
-                "opexRenewable": {
-                    "ONSHORE_IEC_1": 17000.0,
-                    "ONSHORE_IEC_3": 17000.0,
-                    "OFFSHORE_IEC_1": 100000.0,
-                    "SOLAR_ROOFTOP": 40000.0,
-                    "SOLAR_UTILITY": 40000.0,
-                },  # EUR/MW/a # not used anymore (needs to be removed)
             },
         }
 
